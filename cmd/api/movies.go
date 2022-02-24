@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"time"
+	"errors"
 
 	"greenlight.abusayem.net/internal/data"
 	"greenlight.abusayem.net/internal/validator"
@@ -24,22 +24,34 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	v := validator.New()
-	v.Check(input.Title != "", "title", "must be provided")
-	v.Check(len(input.Title) <= 500, "title", "must not be more than 500 bytes long")
-	v.Check(input.Year != 0, "year", "must be provided")
-	v.Check(input.Year >= 1900 && input.Year <= 2100, "year", "must be between 1900 and 2100")
-	v.Check(input.Runtime >= 0, "runtime", "must be greater than 0")
-	v.Check(len(input.Genres) > 0, "genres", "must be provided")
-	v.Check(len(input.Genres) <= 10, "genres", "must not be more than 10 items")
-	v.Check(validator.Unique(input.Genres), "genres", "must not contain duplicate values")
+	movie := &data.Movie{
+		Title: input.Title,
+		Year: input.Year,
+		Runtime: input.Runtime,
+		Genres: input.Genres,
+	}
 
-	if !v.Valid() {
+	v := validator.New()
+
+	if data.ValidateMovie(v, movie); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	fmt.Fprintf(w, "%+v\n", input)
+	err = app.models.Movies.Insert(movie)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", movie.ID))
+
+	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": movie}, headers)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 
@@ -52,13 +64,16 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	movie := data.Movie{
-		ID:        id,
-		CreatedAt: time.Now(),
-		Title:     "Casablanca",
-		Runtime:   102,
-		Genres:    []string{"drama", "romance", "war"},
-		Version:   1,
+	movie, err := app.models.Movies.Get(id)
+
+	if err != nil {
+		switch {
+			case errors.Is(err, data.ErrRecordNotFound):
+				app.notFoundResponse(w, r)
+			default:
+				app.serverErrorResponse(w, r, err)
+		}
+	return
 	}
 
 	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
