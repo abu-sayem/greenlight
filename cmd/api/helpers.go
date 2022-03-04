@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
+
+	"greenlight.abusayem.net/internal/validator"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -41,7 +45,6 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data envelo
 	return nil
 }
 
-
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
 	err := json.NewDecoder(r.Body).Decode(dst)
 
@@ -71,4 +74,45 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst int
 		}
 	}
 	return nil
+}
+
+// The readString function reads a string from the request body.
+// It returns default value if it is empty.
+func (app *application) readString(qs url.Values, key string, defaultValue string) string {
+	value := qs.Get(key)
+
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+// The readCsv() helper function reads value from query string and split it
+// into a slice of strings. It returns default value if it is empty.
+func (app *application) readCSV(qs url.Values, key string, defaultValue []string) []string {
+	csv := qs.Get(key)
+
+	if csv == "" {
+		return defaultValue
+	}
+
+	return strings.Split(csv, ",")
+}
+
+// the readInt() helper function reads value from query string and convert it
+// into an integer. It returns error if it is empty.
+func (app *application) readInt(qs url.Values, key string, defaultValue int, v *validator.Validator) int {
+	s := qs.Get(key)
+
+	if s == "" {
+		return defaultValue
+	}
+
+	i, err := strconv.Atoi(s)
+
+	if err != nil {
+		v.AddError(key, "must be an integer")
+		return defaultValue
+	}
+	return i
 }

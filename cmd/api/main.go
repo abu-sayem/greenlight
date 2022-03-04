@@ -1,19 +1,18 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
-	"database/sql" 
-	"context"
 
 	"greenlight.abusayem.net/internal/data"
 
 	_ "github.com/lib/pq"
-
 )
 
 const version = "1.0.0"
@@ -21,11 +20,11 @@ const version = "1.0.0"
 type config struct {
 	port int
 	env  string
-	db	 struct {
-		dsn string
+	db   struct {
+		dsn          string
 		maxOpenConns int
 		maxIdleConns int
-		maxIdleTime string
+		maxIdleTime  string
 	}
 }
 
@@ -47,7 +46,6 @@ func main() {
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
-
 
 	flag.Parse()
 
@@ -83,8 +81,8 @@ func main() {
 }
 
 func openDB(cfg config) (*sql.DB, error) {
-// Use sql.Open() to create an empty connection pool, using the DSN from the config
-// struct.
+	// Use sql.Open() to create an empty connection pool, using the DSN from the config
+	// struct.
 	db, err := sql.Open("postgres", cfg.db.dsn)
 	if err != nil {
 		return nil, err
