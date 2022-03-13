@@ -4,9 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"fmt"
-	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"greenlight.abusayem.net/internal/data"
@@ -34,6 +33,11 @@ type config struct {
 		password string
 		sender   string
 	}
+	limiter struct {
+		rps     float64
+		burst   int
+		enabled bool
+	}
 }
 
 type application struct {
@@ -41,6 +45,7 @@ type application struct {
 	logger *jsonlog.Logger
 	models data.Models
 	mailer mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -55,6 +60,9 @@ func main() {
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
+	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
+	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
 
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "smtp.mailtrap.io", "SMTP host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
@@ -83,21 +91,10 @@ func main() {
 		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+	err = app.serve()
+	if err != nil {
+		logger.PrintFatal(err, nil)
 	}
-
-	logger.PrintInfo("starting server", map[string]string{
-		"addr": srv.Addr,
-		"env":  cfg.env,
-	})
-
-	err = srv.ListenAndServe()
-	logger.PrintFatal(err, nil)
 
 }
 
